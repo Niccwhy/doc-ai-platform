@@ -18,6 +18,9 @@ logs/
 .DS_Store
 Thumbs.db
 
+# ===== WorkBuddy 项目记忆（不随代码上 GitHub）=====
+.workbuddy/
+
 # ===== 临时文件 =====
 *.tmp
 *.bak
