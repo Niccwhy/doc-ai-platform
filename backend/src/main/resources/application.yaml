@@ -1,3 +1,38 @@
 spring:
   application:
     name: backend
+  datasource:
+    url: jdbc:postgresql://localhost:5432/docai
+    username: docai
+    password: docai123
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 30000
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+  global-config:
+    banner: false
+    db-config:
+      id-type: auto
+
+minio:
+  endpoint: http://localhost:9000
+  access-key: minioadmin
+  secret-key: minioadmin123
+  bucket: docai
+
+# LLM 网关配置。api-key 留空则自动降级为 MockClient（便于无 Key 联调）。
+llm:
+  provider: deepseek          # deepseek / qwen(通义) / glm
+  api-key: ""                 # 填入后启用真实调用
+  base-url: https://api.deepseek.com
+  model: deepseek-chat
+  embedding-model: text-embedding-v1
+
+server:
+  port: 8080
