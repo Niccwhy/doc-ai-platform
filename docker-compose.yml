@@ -1,0 +1,36 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: docai-postgres
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-docai}
+      POSTGRES_USER: ${POSTGRES_USER:-docai}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-docai123}
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+      - ./sql/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-docai} -d ${POSTGRES_DB:-docai}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  silo:
+    image: docker.io/pgsty/silo:RELEASE.2026-10-26T00-00-00Z
+    container_name: docai-silo
+    command: server /data --console-address ":9001"
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_UI_PORT:-9001}:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+    volumes:
+      - ./data/silo:/data
+    healthcheck:
+      test: ["CMD", "silo", "healthcheck", "ready"]
+      interval: 30s
+      timeout: 5s
+      retries: 10
