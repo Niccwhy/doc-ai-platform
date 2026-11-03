@@ -1,6 +1,10 @@
 HELP.md
 target/
 .mvn/wrapper/maven-wrapper.jar
+
+# 本地敏感配置（真实 key），不提交
+application-local.yaml
+src/main/resources/application-local.yaml
 !**/src/main/**/target/
 !**/src/test/**/target/
 
