@@ -96,33 +96,6 @@ public class TaskService {
     }
 
     /**
-     * 更新任务状态与进度并推送 SSE（供外部业务在异步执行中回调）。
-     */
-    public void updateProgress(String taskId, String status, int progress) {
-        update(taskId, status, progress, null, null, null);
-    }
-
-    /**
-     * 更新任务状态、进度与结果（结果以 JSON 字符串存入 result 字段）并推送 SSE。
-     */
-    public void complete(String taskId, String status, String resultJson) {
-        Task task = findByTaskId(taskId);
-        task.setStatus(status);
-        task.setProgress("SUCCESS".equals(status) ? 100 : task.getProgress());
-        task.setResult(resultJson);
-        task.setFinishedAt(OffsetDateTime.now());
-        taskMapper.updateById(task);
-        push(taskId, status, task.getProgress());
-    }
-
-    /**
-     * 标记任务失败并记录错误信息。
-     */
-    public void fail(String taskId, String errorMsg) {
-        update(taskId, "FAILED", 100, errorMsg == null ? "未知错误" : errorMsg, null, OffsetDateTime.now());
-    }
-
-    /**
      * 订阅 SSE：前端建立长连接接收进度推送。
      */
     public SseEmitter subscribe(String taskId) {

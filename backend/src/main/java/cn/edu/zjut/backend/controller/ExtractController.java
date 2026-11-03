@@ -44,16 +44,4 @@ public class ExtractController {
         String instruction = String.valueOf(body.getOrDefault("instruction", ""));
         return Result.ok(extractService.extract(context, fields, instruction));
     }
-
-    /**
-     * 从样本集检索并抽取字段（走「检索 → LLM」真实链路）。
-     * body: { "fields": ["甲方","金额"], "instruction": "..." }
-     */
-    @PostMapping("/corpus")
-    public Result<Map<String, String>> extractFromCorpus(@RequestBody Map<String, Object> body) {
-        @SuppressWarnings("unchecked")
-        List<String> fields = (List<String>) body.getOrDefault("fields", List.of());
-        String instruction = String.valueOf(body.getOrDefault("instruction", ""));
-        return Result.ok(extractService.extractFromCorpus(fields, instruction));
-    }
 }
