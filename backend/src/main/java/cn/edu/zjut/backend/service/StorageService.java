@@ -119,12 +119,20 @@ public class StorageService {
      * 生成预签名下载 URL（默认 1 小时有效）。
      */
     public String presignedUrl(String objectKey) {
+        return presignedUrl(objectKey, 3600);
+    }
+
+    /**
+     * 生成预签名下载 URL，指定有效秒数（1 ~ 604800，即最长 7 天，S3 上限）。
+     */
+    public String presignedUrl(String objectKey, int expireSeconds) {
+        int seconds = (expireSeconds <= 0) ? 3600 : Math.min(expireSeconds, 604800);
         try {
             return minioClient.getPresignedObjectUrl(GetPresignedObjectUrlArgs.builder()
                     .method(Method.GET)
                     .bucket(props.getBucket())
                     .object(objectKey)
-                    .expiry(1, TimeUnit.HOURS)
+                    .expiry(seconds, TimeUnit.SECONDS)
                     .build());
         } catch (Exception e) {
             throw new BizException(ResultCode.INTERNAL_ERROR, "生成下载链接失败: " + e.getMessage());
@@ -158,5 +166,80 @@ public class StorageService {
         String name = originalName == null || originalName.isBlank() ? "file" : originalName;
         // 按日期分目录，避免同名覆盖
         return "uploads/" + java.time.LocalDate.now() + "/" + UUID.randomUUID() + "-" + name;
+    }
+
+    // ------------------------------------------------------------------
+    // 内容寻址存储（v3 资产入库）：key 由内容指纹派生，同内容只存一份
+    // ------------------------------------------------------------------
+
+    /**
+     * 按指定 key 写入对象；已存在则直接跳过（幂等）。
+     * <p>
+     * 用于内容寻址：key 由 sha256 派生，多个 document 行可共享同一对象，
+     * 既省存储，也避免同一文件被重复解析与重复计算 embedding。
+     *
+     * @return true=本次真正写入，false=对象已存在（复用）
+     */
+    public boolean putAtKeyIfAbsent(String key, byte[] bytes, String contentType) {
+        if (!ensureBucket()) {
+            throw new BizException(ResultCode.INTERNAL_ERROR,
+                    "对象存储不可用，请确认 MinIO/silo 容器已启动（" + props.getEndpoint() + "）");
+        }
+        if (exists(key)) {
+            return false;
+        }
+        try (InputStream in = new ByteArrayInputStream(bytes)) {
+            minioClient.putObject(PutObjectArgs.builder()
+                    .bucket(props.getBucket())
+                    .object(key)
+                    .stream(in, bytes.length, -1)
+                    .contentType(contentType == null ? "application/octet-stream" : contentType)
+                    .build());
+            return true;
+        } catch (Exception e) {
+            bucketReady = false;
+            throw new BizException(ResultCode.FILE_PARSE_ERROR, "文件上传失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 对象是否存在。
+     */
+    public boolean exists(String key) {
+        try {
+            minioClient.statObject(io.minio.StatObjectArgs.builder()
+                    .bucket(props.getBucket())
+                    .object(key)
+                    .build());
+            return true;
+        } catch (io.minio.errors.ErrorResponseException e) {
+            // NoSuchKey 属正常分支，其余错误向上抛
+            String code = e.errorResponse() == null ? "" : e.errorResponse().code();
+            if ("NoSuchKey".equals(code) || "NoSuchObject".equals(code)) {
+                return false;
+            }
+            throw new BizException(ResultCode.INTERNAL_ERROR, "检查对象失败: " + e.getMessage());
+        } catch (Exception e) {
+            bucketReady = false;
+            throw new BizException(ResultCode.INTERNAL_ERROR, "检查对象失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 删除对象。对象不存在视为成功（幂等）。
+     */
+    public void delete(String key) {
+        try {
+            minioClient.removeObject(io.minio.RemoveObjectArgs.builder()
+                    .bucket(props.getBucket())
+                    .object(key)
+                    .build());
+        } catch (Exception e) {
+            log.warn("删除对象失败（可留给 GC 任务重试）: key={}, err={}", key, e.getMessage());
+        }
+    }
+
+    public String bucket() {
+        return props.getBucket();
     }
 }

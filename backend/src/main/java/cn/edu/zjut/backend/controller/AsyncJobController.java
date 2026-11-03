@@ -36,14 +36,15 @@ public class AsyncJobController {
      * body: { "documentId": 1, "instruction": "只抽取合同类字段" }
      */
     @PostMapping("/extract")
-    public Result<Map<String, String>> submitExtract(@RequestBody Map<String, Object> body) {
+    public Result<Map<String, Object>> submitExtract(@RequestBody Map<String, Object> body) {
         Object raw = body.get("documentId");
         if (!(raw instanceof Number number)) {
             return Result.fail(400, "documentId 必须是数字");
         }
+        Long schemaId = body.get("schemaId") instanceof Number s ? s.longValue() : null;
         String instruction = String.valueOf(body.getOrDefault("instruction", ""));
-        String taskId = asyncJobService.submitExtract(number.longValue(), instruction);
-        asyncJobService.runExtract(taskId, number.longValue(), instruction);
+        Long taskId = asyncJobService.submitExtract(number.longValue(), schemaId, instruction);
+        asyncJobService.runExtract(taskId, number.longValue(), schemaId, instruction);
         return Result.ok(Map.of("taskId", taskId));
     }
 
@@ -51,14 +52,14 @@ public class AsyncJobController {
      * 提交填表任务（上传模板）。
      */
     @PostMapping("/fill")
-    public Result<Map<String, String>> submitFill(@RequestParam("file") MultipartFile file) {
+    public Result<Map<String, Object>> submitFill(@RequestParam("file") MultipartFile file) {
         if (file == null || file.isEmpty()) {
             return Result.fail(400, "文件不能为空");
         }
         try {
             byte[] bytes = file.getBytes();
             String fileName = file.getOriginalFilename();
-            String taskId = asyncJobService.submitFill(fileName);
+            Long taskId = asyncJobService.submitFill(fileName);
             asyncJobService.runFill(taskId, bytes, fileName);
             return Result.ok(Map.of("taskId", taskId));
         } catch (java.io.IOException e) {
@@ -70,7 +71,7 @@ public class AsyncJobController {
      * 下载任务产物（填表结果）。
      */
     @GetMapping("/{taskId}/file")
-    public ResponseEntity<byte[]> download(@PathVariable String taskId) {
+    public ResponseEntity<byte[]> download(@PathVariable Long taskId) {
         AsyncJobService.ExportFile file = asyncJobService.exportFile(taskId);
         String contentType = file.fileName().endsWith(".docx")
                 ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document"

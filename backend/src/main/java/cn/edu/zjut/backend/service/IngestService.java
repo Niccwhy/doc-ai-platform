@@ -2,6 +2,7 @@ package cn.edu.zjut.backend.service;
 
 import cn.edu.zjut.backend.dto.DocParseResult;
 import cn.edu.zjut.backend.dto.UploadFile;
+import cn.edu.zjut.backend.entity.Task;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,12 +41,12 @@ public class IngestService {
     }
 
     /**
-     * 提交批量上传任务，立即返回 taskId。
+     * 提交批量上传任务，立即返回任务 id。
      */
-    public String submit(List<String> fileNames) {
+    public Long submit(List<String> fileNames) {
         try {
             String payload = objectMapper.writeValueAsString(Map.of("files", fileNames));
-            return taskService.submit("INGEST", payload);
+            return taskService.submit(Task.TYPE_EXTRACT, payload);
         } catch (Exception e) {
             throw new RuntimeException("序列化任务入参失败", e);
         }
@@ -58,8 +59,8 @@ public class IngestService {
      * 请求结束后容器会清理 multipart 临时文件，异步线程再读会失败。
      */
     @Async("taskExecutor")
-    public void ingestBatch(String taskId, List<UploadFile> files) {
-        taskService.updateProgress(taskId, "RUNNING", 5);
+    public void ingestBatch(Long taskId, List<UploadFile> files) {
+        taskService.updateProgress(taskId, Task.STATUS_PROCESSING, 5);
         int total = files.size();
         List<Map<String, Object>> results = new ArrayList<>();
         int ok = 0;
@@ -94,7 +95,7 @@ public class IngestService {
                 results.add(r);
             }
             int progress = 5 + (int) ((i + 1) * 90.0 / total);
-            taskService.updateProgress(taskId, "RUNNING", progress);
+            taskService.updateProgress(taskId, Task.STATUS_PROCESSING, progress);
         }
 
         try {
@@ -104,7 +105,7 @@ public class IngestService {
             result.put("failed", total - ok);
             result.put("files", results);
             // 全部失败时任务标记为 FAILED，避免误导调用方
-            taskService.complete(taskId, ok > 0 ? "SUCCESS" : "FAILED",
+            taskService.complete(taskId, ok > 0 ? Task.STATUS_COMPLETED : Task.STATUS_FAILED,
                     objectMapper.writeValueAsString(result));
         } catch (Exception e) {
             taskService.fail(taskId, e.getMessage());

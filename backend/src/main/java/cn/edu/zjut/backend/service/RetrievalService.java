@@ -3,6 +3,7 @@ package cn.edu.zjut.backend.service;
 import cn.edu.zjut.backend.dao.ChunkVectorDao;
 import cn.edu.zjut.backend.entity.DocChunk;
 import cn.edu.zjut.backend.mapper.DocChunkMapper;
+import cn.edu.zjut.backend.security.CurrentUser;
 import cn.edu.zjut.backend.service.embedding.EmbeddingClient;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import org.springframework.stereotype.Service;
@@ -14,7 +15,7 @@ import java.util.Map;
 
 /**
  * 跨文档双路召回检索：向量相似度 + 关键词（全文）召回，合并去重后返回上下文片段。
- * 供信息抽取与模板填表复用。
+ * 供信息抽取与模板填表复用。所有召回强制按当前租户过滤。
  */
 @Service
 public class RetrievalService {
@@ -34,18 +35,19 @@ public class RetrievalService {
     /**
      * 双路召回 Top-K 片段。
      *
-     * @param query    查询词（字段名 / 表头 / 短语）
-     * @param topK     返回条数
+     * @param query 查询词（字段名 / 表头 / 短语）
+     * @param topK  返回条数
      * @return 按相关度降序的上下文片段文本
      */
     public List<String> retrieve(String query, int topK) {
+        long deptId = CurrentUser.deptId();
         Map<Long, DocChunk> merged = new LinkedHashMap<>();
 
         // 路 1：向量召回（有 embedding 才走）
-        if (embeddingClient.isAvailable() && chunkVectorDao.countWithEmbedding() > 0) {
+        if (embeddingClient.isAvailable() && chunkVectorDao.countWithEmbedding(deptId) > 0) {
             try {
                 float[] qv = embeddingClient.embed(query);
-                List<Map<String, Object>> hits = chunkVectorDao.vectorSearch(qv, topK, 0.3);
+                List<Map<String, Object>> hits = chunkVectorDao.vectorSearch(qv, deptId, topK, 0.3);
                 for (Map<String, Object> hit : hits) {
                     long id = ((Number) hit.get("id")).longValue();
                     DocChunk chunk = docChunkMapper.selectById(id);
@@ -60,6 +62,7 @@ public class RetrievalService {
 
         // 路 2：关键词（全文）召回
         List<DocChunk> kwHits = docChunkMapper.selectList(new QueryWrapper<DocChunk>()
+                .eq("dept_id", deptId)
                 .like("content", query)
                 .last("LIMIT " + topK));
         for (DocChunk chunk : kwHits) {

@@ -36,7 +36,7 @@ public class IngestController {
      * 返回 taskId，前端通过 /api/tasks/{taskId} 轮询或 SSE 订阅进度。
      */
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public Result<Map<String, String>> ingest(@RequestParam("files") List<MultipartFile> files) {
+    public Result<Map<String, Object>> ingest(@RequestParam("files") List<MultipartFile> files) {
         if (files == null || files.isEmpty()) {
             return Result.fail(400, "至少上传一个文件");
         }
@@ -53,7 +53,7 @@ public class IngestController {
             return Result.fail(500, "读取上传文件失败: " + e.getMessage());
         }
 
-        String taskId = ingestService.submit(names);
+        Long taskId = ingestService.submit(names);
         ingestService.ingestBatch(taskId, uploads);
         return Result.ok(Map.of("taskId", taskId));
     }
