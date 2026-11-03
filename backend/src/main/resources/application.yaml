@@ -48,6 +48,20 @@ embedding:
   model: ${EMBEDDING_MODEL:text-embedding-v3}
   dimension: ${EMBEDDING_DIMENSION:1536} # 通义 text-embedding-v3 默认 1536 维
 
+# ============================================================
+# 认证与初始化
+# JWT_SECRET 必须 >= 32 字节，生产环境请务必通过环境变量覆盖
+# ============================================================
+jwt:
+  secret: ${JWT_SECRET:doc-ai-platform-local-dev-secret-key-change-me-2026}
+  expiration-minutes: ${JWT_EXPIRATION_MINUTES:720}
+
+app:
+  init:
+    admin-username: ${INIT_ADMIN_USERNAME:admin}
+    admin-password: ${INIT_ADMIN_PASSWORD:admin123}
+    demo-users: ${INIT_DEMO_USERS:true}
+
 # 文档操作版本库与异步任务导出目录（均在 .gitignore 的 data/ 下）
 doc:
   version:
