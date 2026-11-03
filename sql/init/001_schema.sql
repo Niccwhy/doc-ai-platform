@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS doc_chunk (
     chunk_type    VARCHAR(16) NOT NULL,           -- text / table
     heading_path  VARCHAR(512),                   -- 标题层级路径（如 1.1.2）
     content       TEXT NOT NULL,                  -- 原文内容
-    embedding     vector(1024),                   -- 文本向量（维度取决于 embedding 模型，可调）
+    embedding     vector(1536),                   -- 文本向量（通义 text-embedding-v3 默认 1536 维）
     cell_ref      VARCHAR(64),                    -- 表格片段：sheet 名 + 单元格坐标（如 Sheet1!A1:D10）
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
