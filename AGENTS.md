@@ -31,6 +31,7 @@ docs 目录下包含 `roadmap.md`、`db_change_log.md`、`功能模块设计.md`
 2. 统一响应体：所有 Controller 返回 `Result<T>` 结构。
 3. 异常处理：业务失败抛出 `BizException`，交由 `GlobalExceptionHandler` 统一拦截，禁止在 Controller 中写 try-catch 处理业务异常。
 4. 事务控制：涉及多表操作（如创建任务同时关联文件）必须在 Service 层加 `@Transactional` 注解。
+5. 接口设计参考 `docs/api-spec.md`，确保 URL、HTTP 方法、参数传递、分页等规范统一，使用 `springdoc-openapi` 生成 Swagger 文档。
 
 ### 4.2 数据库操作
 1. 开发中遇到需要修改数据库表结构的情况，先记录在 `docs/roadmap.md`，当修改的需求积攒到一定量再进行修改，避免频繁修改数据库表结构。

@@ -10,7 +10,7 @@
 ### 阶段一：基座搭建与资产入库
 
 - [ ] **1.1 基础环境与配置**
-    - [ ] 编写 `docker-compose.yml` 启动 PG 与 MinIO。（人类）
+    - [x] 编写 `docker-compose.yml` 启动 PG 与 MinIO。（人类）
     - [ ] 执行建表 SQL，初始化基础部门与用户数据。（人类）
 - [ ] **1.2 鉴权与多租户**
     - [ ] 配置 Spring Security + JWT 登录认证。
