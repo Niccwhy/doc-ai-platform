@@ -22,3 +22,6 @@ Thumbs.db
 *.tmp
 *.bak
 *.swp
+
+# ===== 本地构建缓存 =====
+.m2repo/

@@ -65,3 +65,17 @@
 
 
 ## TODO
+
+### 1.2 鉴权与多租户（已实现，待人类审查）
+- 认证方式：JWT（HS256），登录接口 `POST /api/v1/auth/login`；Token Claims 包含 `uid`、`deptId`、`role`，默认有效期 120 分钟。
+- 配置项：`security.jwt.secret`、`security.jwt.expiration-minutes`，均可通过环境变量 `JWT_SECRET`、`JWT_EXPIRATION_MINUTES` 覆盖。
+- 上下文注入：`JwtAuthenticationFilter` 解析 Token 后写入 `UserContextHolder`（ThreadLocal）与 Spring SecurityContext，请求结束统一清理；未登录/无效 Token 返回 401 的 `Result` 结构。
+- 访问控制：除 `/api/v1/auth/login` 和 `/error` 外全部接口需要认证；角色以 `ROLE_{role}` 形式写入权限集合，后续可接入 `@PreAuthorize`。
+- 待后续：异步线程池上下文传递、SSE 鉴权、刷新 Token。
+
+### 1.3 手动上传与去重（已实现，待人类审查）
+- 上传接口：`POST /api/v1/documents`（multipart：`file`、`fileCategory`，默认 `SOURCE`，仅允许 `SOURCE/TEMPLATE`）。
+- 去重规则：流式计算 SHA-256，在同部门内按 `document_version.sha256 + is_current=1 + document.deleted_at IS NULL` 判重；命中直接返回已有记录并标记 `duplicate=true`，不重复写 MinIO。
+- 存储路径：`dept/{deptId}/source|template/{uuid}.{ext}`，桶名默认 `docai`，首次上传时自动建桶。
+- 事务：文件元数据与版本记录写入在同一事务内完成。
+- 待后续：并发去重唯一约束、标签关联、上传后自动解析、MinIO 写入失败时的补偿删除。
