@@ -1,5 +1,6 @@
 package cn.edu.zjut.backend.document.service;
 
+import cn.edu.zjut.backend.common.FileNameUtils;
 import cn.edu.zjut.backend.common.Sha256Utils;
 import cn.edu.zjut.backend.document.dto.UploadDocumentResponse;
 import cn.edu.zjut.backend.document.entity.Document;
@@ -29,7 +30,6 @@ public class DocumentUploadService {
 
     private static final Set<String> UPLOADABLE_CATEGORIES = Set.of("SOURCE", "TEMPLATE");
     private static final int MAX_FILE_NAME_LENGTH = 255;
-    private static final int MAX_EXTENSION_LENGTH = 10;
     private static final String DEFAULT_FILE_NAME = "unnamed";
 
     private final DocumentMapper documentMapper;
@@ -43,7 +43,10 @@ public class DocumentUploadService {
             throw new BizException(400, "上传文件不能为空");
         }
         String category = normalizeCategory(fileCategory);
-        String fileName = sanitizeFileName(file.getOriginalFilename());
+        String fileName = FileNameUtils.sanitize(file.getOriginalFilename(), DEFAULT_FILE_NAME);
+        if (fileName.length() > MAX_FILE_NAME_LENGTH) {
+            fileName = fileName.substring(fileName.length() - MAX_FILE_NAME_LENGTH);
+        }
         String sha256 = Sha256Utils.hash(file);
 
         UploadDocumentResponse duplicateResponse = findDuplicate(userContext.deptId(), sha256);
@@ -117,38 +120,8 @@ public class DocumentUploadService {
         return category;
     }
 
-    private static String sanitizeFileName(String originalFilename) {
-        String fileName = StringUtils.hasText(originalFilename)
-                ? StringUtils.cleanPath(originalFilename) : DEFAULT_FILE_NAME;
-        int separatorIndex = Math.max(fileName.lastIndexOf('/'), fileName.lastIndexOf('\\'));
-        if (separatorIndex >= 0) {
-            fileName = fileName.substring(separatorIndex + 1);
-        }
-        if (!StringUtils.hasText(fileName)) {
-            fileName = DEFAULT_FILE_NAME;
-        }
-        return fileName.length() > MAX_FILE_NAME_LENGTH
-                ? fileName.substring(fileName.length() - MAX_FILE_NAME_LENGTH) : fileName;
-    }
-
     private static String buildStorageKey(Long deptId, String category, String fileName) {
         return "dept/" + deptId + "/" + category.toLowerCase(Locale.ROOT) + "/"
-                + UUID.randomUUID() + buildExtensionSuffix(fileName);
-    }
-
-    private static String buildExtensionSuffix(String fileName) {
-        int dotIndex = fileName.lastIndexOf('.');
-        if (dotIndex <= 0 || dotIndex == fileName.length() - 1) {
-            return "";
-        }
-        String extension = fileName.substring(dotIndex + 1).toLowerCase(Locale.ROOT)
-                .replaceAll("[^a-z0-9]", "");
-        if (extension.isEmpty()) {
-            return "";
-        }
-        if (extension.length() > MAX_EXTENSION_LENGTH) {
-            extension = extension.substring(0, MAX_EXTENSION_LENGTH);
-        }
-        return "." + extension;
+                + UUID.randomUUID() + FileNameUtils.extensionSuffix(fileName);
     }
 }

@@ -22,3 +22,9 @@ security:
   jwt:
     secret: ${JWT_SECRET:doc-ai-platform-dev-secret-key-please-change-0123456789}
     expiration-minutes: ${JWT_EXPIRATION_MINUTES:120}
+
+email:
+  imap:
+    enabled: ${EMAIL_IMAP_ENABLED:true}
+    poll-interval-ms: ${EMAIL_IMAP_POLL_INTERVAL_MS:60000}
+    initial-delay-ms: ${EMAIL_IMAP_INITIAL_DELAY_MS:60000}

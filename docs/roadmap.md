@@ -79,3 +79,11 @@
 - 存储路径：`dept/{deptId}/source|template/{uuid}.{ext}`，桶名默认 `docai`，首次上传时自动建桶。
 - 事务：文件元数据与版本记录写入在同一事务内完成。
 - 待后续：并发去重唯一约束、标签关联、上传后自动解析、MinIO 写入失败时的补偿删除。
+
+### 1.4 邮件拉取与暂存（已实现，待人类配置测试邮箱）
+- 定时任务：`EmailPullScheduler` 默认每 60 秒（`email.imap.poll-interval-ms`）遍历 `dept_email_config` 中启用的邮箱，单个邮箱失败不影响其他邮箱；测试环境通过 `email.imap.enabled=false` 关闭。
+- 拉取方式：Jakarta Mail IMAPS，按邮箱 `last_uid` 增量拉取 INBOX，跳过 inline 内容，仅提取附件。
+- 暂存：附件写入 MinIO `temp/{deptId}/{uuid}.{ext}`，并写入 `email_pending`（`status=PENDING`）。
+- 幂等：同一 `dept_id + email_uid + attachment_name` 已存在时跳过，避免失败重试产生重复记录。
+- 事务：`email_pending` 插入与 `dept_email_config.last_uid` 更新在同一事务内完成。
+- 待后续：附件流式上传与大小限制、暂存池人工确认转正式资产的接口、失败重试与告警、临时对象清理。
