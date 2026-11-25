@@ -20,9 +20,31 @@ public class DeptEmailConfigService {
                 .orderByAsc(DeptEmailConfig::getId));
     }
 
+    public List<DeptEmailConfig> listEnabledByDept(Long deptId) {
+        return deptEmailConfigMapper.selectList(new LambdaQueryWrapper<DeptEmailConfig>()
+                .eq(DeptEmailConfig::getDeptId, deptId)
+                .eq(DeptEmailConfig::getStatus, 1)
+                .orderByAsc(DeptEmailConfig::getId));
+    }
+
+    public DeptEmailConfig findByIdAndDept(Long configId, Long deptId) {
+        return deptEmailConfigMapper.selectOne(new LambdaQueryWrapper<DeptEmailConfig>()
+                .eq(DeptEmailConfig::getId, configId)
+                .eq(DeptEmailConfig::getDeptId, deptId)
+                .last("LIMIT 1"));
+    }
+
     public void updateLastUid(Long configId, long lastUid) {
         DeptEmailConfig update = new DeptEmailConfig();
         update.setId(configId);
+        update.setLastUid(lastUid);
+        deptEmailConfigMapper.updateById(update);
+    }
+
+    public void updateCursor(Long configId, Long uidValidity, long lastUid) {
+        DeptEmailConfig update = new DeptEmailConfig();
+        update.setId(configId);
+        update.setUidValidity(uidValidity);
         update.setLastUid(lastUid);
         deptEmailConfigMapper.updateById(update);
     }

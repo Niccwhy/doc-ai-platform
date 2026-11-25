@@ -8,20 +8,19 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 @Data
-@TableName("email_pending")
-public class EmailPending {
+@TableName("email_message")
+public class EmailMessage {
 
     @TableId(type = IdType.AUTO)
     private Long id;
     private Long deptId;
+    private Long emailConfigId;
+    private Long uidValidity;
     private Long emailUid;
     private String sender;
     private String subject;
-    private String attachmentName;
-    private Long attachmentSize;
-    private String tempStorageKey;
-    private Long suggestedDocumentId;
-    private Long suggestedPendingId;
+    private LocalDateTime receivedAt;
+    private String bodyText;
     private String status;
     private LocalDateTime createdAt;
 }

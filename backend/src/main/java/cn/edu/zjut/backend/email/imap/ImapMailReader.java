@@ -7,8 +7,8 @@ import cn.edu.zjut.backend.auth.entity.DeptEmailConfig;
  */
 public interface ImapMailReader {
 
-    /**
-     * 拉取 UID 大于 lastUid 的邮件附件。
-     */
-    ImapFetchResult fetch(DeptEmailConfig config, long lastUid);
+    ImapDiscoveryResult discover(DeptEmailConfig config, long lastUid);
+
+    EmailAttachmentContent fetchAttachment(DeptEmailConfig config, long emailUid, String partId);
+
 }

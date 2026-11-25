@@ -19,6 +19,7 @@ public class DeptEmailConfig {
     private Integer imapPort;
     private String authCode;
     private Long lastUid;
+    private Long uidValidity;
     private Integer status;
     private LocalDateTime createdAt;
 }

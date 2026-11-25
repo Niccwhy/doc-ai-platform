@@ -1,15 +1,25 @@
 package cn.edu.zjut.backend.security;
 
+import jakarta.annotation.PostConstruct;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+
+import java.nio.charset.StandardCharsets;
 
 @ConfigurationProperties(prefix = "security.jwt")
 public class JwtProperties {
 
-    /**
-     * HS256 签名密钥，长度不得少于 32 字节，生产环境必须通过环境变量覆盖。
-     */
-    private String secret = "doc-ai-platform-dev-secret-key-please-change-0123456789";
+    private String secret;
     private long expirationMinutes = 120;
+
+    @PostConstruct
+    public void validate() {
+        if (secret == null || secret.isBlank()) {
+            throw new IllegalStateException("JWT_SECRET 未配置");
+        }
+        if (secret.getBytes(StandardCharsets.UTF_8).length < 32) {
+            throw new IllegalStateException("JWT_SECRET 至少需要 32 字节");
+        }
+    }
 
     public String getSecret() {
         return secret;

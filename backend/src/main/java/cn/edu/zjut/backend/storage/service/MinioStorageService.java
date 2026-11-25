@@ -1,4 +1,4 @@
-package cn.edu.zjut.backend.storage;
+package cn.edu.zjut.backend.storage.service;
 
 import cn.edu.zjut.backend.config.MinioProperties;
 import cn.edu.zjut.backend.exception.BizException;
@@ -6,6 +6,7 @@ import io.minio.BucketExistsArgs;
 import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
+import io.minio.RemoveObjectArgs;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
@@ -33,6 +34,17 @@ public class MinioStorageService {
                     .build());
         } catch (Exception exception) {
             throw new BizException(500, "文件上传至对象存储失败", exception);
+        }
+    }
+
+    public void removeObject(String objectKey) {
+        try {
+            minioClient.removeObject(RemoveObjectArgs.builder()
+                    .bucket(minioProperties.getBucket())
+                    .object(objectKey)
+                    .build());
+        } catch (Exception exception) {
+            throw new BizException(500, "对象存储清理失败: " + objectKey, exception);
         }
     }
 

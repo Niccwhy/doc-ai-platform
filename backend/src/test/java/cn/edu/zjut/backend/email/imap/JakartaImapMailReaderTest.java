@@ -29,7 +29,7 @@ class JakartaImapMailReaderTest {
     }
 
     @Test
-    void shouldExtractAttachmentFromMultipartMessage() throws Exception {
+    void shouldExtractMessageAndAttachmentMetadata() throws Exception {
         MimeMessage message = new MimeMessage(session);
         message.setFrom(new InternetAddress("client@example.com"));
         message.setSubject("合同附件");
@@ -48,16 +48,18 @@ class JakartaImapMailReaderTest {
         message.setContent(multipart);
         message.saveChanges();
 
-        List<EmailAttachment> attachments = reader.extractAttachments(message, 101L);
+        EmailMessageMetadata metadata = reader.extractMessageMetadata(message, 101L);
 
-        assertThat(attachments).hasSize(1);
-        EmailAttachment attachment = attachments.get(0);
-        assertThat(attachment.emailUid()).isEqualTo(101L);
-        assertThat(attachment.sender()).isEqualTo("client@example.com");
-        assertThat(attachment.subject()).isEqualTo("合同附件");
+        assertThat(metadata.emailUid()).isEqualTo(101L);
+        assertThat(metadata.sender()).isEqualTo("client@example.com");
+        assertThat(metadata.subject()).isEqualTo("合同附件");
+        assertThat(metadata.bodyText()).isEqualTo("请查收附件");
+        assertThat(metadata.attachments()).hasSize(1);
+        EmailAttachmentMetadata attachment = metadata.attachments().get(0);
+        assertThat(attachment.partId()).isEqualTo("2");
         assertThat(attachment.fileName()).isEqualTo("合同.pdf");
         assertThat(attachment.contentType()).isEqualTo("application/pdf");
-        assertThat(new String(attachment.content(), StandardCharsets.UTF_8)).isEqualTo("PDF-CONTENT");
+        assertThat(attachment.size()).isNotNull();
     }
 
     @Test
@@ -74,7 +76,7 @@ class JakartaImapMailReaderTest {
         message.setContent(multipart);
         message.saveChanges();
 
-        assertThat(reader.extractAttachments(message, 1L)).isEmpty();
+        assertThat(reader.extractMessageMetadata(message, 1L).attachments()).isEmpty();
     }
 
     @Test
@@ -82,6 +84,30 @@ class JakartaImapMailReaderTest {
         MimeMessage message = new MimeMessage(session);
         message.setText("plain text only");
 
-        assertThat(reader.extractAttachments(message, 1L)).isEmpty();
+        assertThat(reader.extractMessageMetadata(message, 1L).attachments()).isEmpty();
+    }
+
+    @Test
+    void shouldConvertHtmlOnlyBodyToReadableText() throws Exception {
+        MimeMessage message = new MimeMessage(session);
+        message.setContent("<html><body><p>第一段</p><p>第二段</p></body></html>", "text/html; charset=UTF-8");
+        message.saveChanges();
+
+        assertThat(reader.extractMessageMetadata(message, 2L).bodyText()).contains("第一段", "第二段");
+    }
+
+    @Test
+    void shouldAssignStableIdToSinglePartAttachment() throws Exception {
+        MimeMessage message = new MimeMessage(session);
+        message.setDisposition(Part.ATTACHMENT);
+        message.setFileName("合同.pdf");
+        message.setDataHandler(new DataHandler(new ByteArrayDataSource(
+                "PDF".getBytes(StandardCharsets.UTF_8), "application/pdf")));
+        message.saveChanges();
+
+        EmailMessageMetadata metadata = reader.extractMessageMetadata(message, 3L);
+
+        assertThat(metadata.attachments()).hasSize(1);
+        assertThat(metadata.attachments().get(0).partId()).isEqualTo("0");
     }
 }

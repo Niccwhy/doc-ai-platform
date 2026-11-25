@@ -19,8 +19,7 @@
     - [ ] 实现文件上传接口，计算 SHA256 并在同部门内校验去重。
     - [ ] 对接 MinIO SDK，将文件流写入对应目录（如 `dept/1/source/`）。（AI 生成，人类审查事务）
 - [ ] **1.4 邮件拉取与暂存**
-    - [ ] 配置 IMAP 定时任务，拉取部门邮箱附件。
-    - [ ] 将附件暂存至 MinIO 的 `temp/` 前缀目录，记录写入 `email_pending` 表。（AI 生成，人类提供测试邮箱）
+    - [ ] 配置 IMAP，手动拉取部门邮箱附件。
 - [ ] **1.5 文件版本控制**
     - [ ] 解析分配员的操作，对比新旧文件，向 `document_version` 追加 V2 记录。确保旧版本文件及其解析块不受影响。（人类主导，AI 辅助）
 
@@ -80,10 +79,11 @@
 - 事务：文件元数据与版本记录写入在同一事务内完成。
 - 待后续：并发去重唯一约束、标签关联、上传后自动解析、MinIO 写入失败时的补偿删除。
 
-### 1.4 邮件拉取与暂存（已实现，待人类配置测试邮箱）
-- 定时任务：`EmailPullScheduler` 默认每 60 秒（`email.imap.poll-interval-ms`）遍历 `dept_email_config` 中启用的邮箱，单个邮箱失败不影响其他邮箱；测试环境通过 `email.imap.enabled=false` 关闭。
-- 拉取方式：Jakarta Mail IMAPS，按邮箱 `last_uid` 增量拉取 INBOX，跳过 inline 内容，仅提取附件。
-- 暂存：附件写入 MinIO `temp/{deptId}/{uuid}.{ext}`，并写入 `email_pending`（`status=PENDING`）。
-- 幂等：同一 `dept_id + email_uid + attachment_name` 已存在时跳过，避免失败重试产生重复记录。
-- 事务：`email_pending` 插入与 `dept_email_config.last_uid` 更新在同一事务内完成。
-- 待后续：附件流式上传与大小限制、暂存池人工确认转正式资产的接口、失败重试与告警、临时对象清理。
+### 1.4 手动邮件发现与附件导入（已实现，待人类配置测试邮箱）
+- 手动接口：`POST /api/v1/emails/discover` 查询当前部门启用邮箱的新邮件；`GET /api/v1/emails` 和 `GET /api/v1/emails/{id}` 查看已发现邮件及附件元信息。
+- 发现阶段：Jakarta Mail IMAPS 只读取邮件元信息、文本正文和附件头信息，不读取附件内容、不上传 MinIO；`last_uid + uid_validity` 仅表示元信息发现游标。
+- 逐附件操作：`POST /api/v1/emails/{id}/attachments/import` 导入选中附件；单个附件以 MIME `part_id` 定位，同名附件可区分；忽略接口记录用户选择。
+- 入库：所选附件上传至 `dept/{deptId}/source/`，创建 `document` 和 `document_version`（`source_type=EMAIL`），附件行保存 `document_version_id`。
+- 状态与幂等：邮件记录 `UNPROCESSED/PROCESSED/IGNORED`；附件记录 `UNPROCESSED/IMPORTING/IMPORTED/IGNORED/FAILED`；元信息写入与游标更新在同一事务内，附件导入失败可重试。
+- 旧 `email_pending` 表保留但新流程不再使用。
+- 待后续：附件流式读取与硬性大小限制、邮箱 UIDVALIDITY 变化场景的真实邮箱验证、导入失败告警、历史 `email_pending` 数据清理。

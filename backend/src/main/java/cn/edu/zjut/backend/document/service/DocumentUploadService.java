@@ -8,22 +8,26 @@ import cn.edu.zjut.backend.document.entity.DocumentVersion;
 import cn.edu.zjut.backend.document.mapper.DocumentMapper;
 import cn.edu.zjut.backend.document.mapper.DocumentVersionMapper;
 import cn.edu.zjut.backend.exception.BizException;
+import cn.edu.zjut.backend.security.TenantAccessChecker;
 import cn.edu.zjut.backend.security.UserContext;
 import cn.edu.zjut.backend.security.UserContextHolder;
-import cn.edu.zjut.backend.storage.MinioStorageService;
+import cn.edu.zjut.backend.storage.service.MinioStorageService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class DocumentUploadService {
@@ -34,11 +38,14 @@ public class DocumentUploadService {
 
     private final DocumentMapper documentMapper;
     private final DocumentVersionMapper documentVersionMapper;
+    private final DocumentPersistenceService documentPersistenceService;
     private final MinioStorageService minioStorageService;
+    private final TenantAccessChecker tenantAccessChecker;
 
-    @Transactional
     public UploadDocumentResponse upload(MultipartFile file, String fileCategory) {
         UserContext userContext = UserContextHolder.getRequired();
+        tenantAccessChecker.requireAnyRole("ADMIN", "DISPATCHER");
+        tenantAccessChecker.requireSameDepartment(userContext.deptId());
         if (file == null || file.isEmpty()) {
             throw new BizException(400, "上传文件不能为空");
         }
@@ -61,25 +68,120 @@ public class DocumentUploadService {
             throw new BizException(500, "读取上传文件失败", exception);
         }
 
-        Document document = new Document();
-        document.setDeptId(userContext.deptId());
-        document.setUploaderId(userContext.userId());
-        document.setFileName(fileName);
-        document.setFileCategory(category);
-        document.setSourceType("WEB");
-        documentMapper.insert(document);
+        try {
+            Document document = new Document();
+            document.setDeptId(userContext.deptId());
+            document.setUploaderId(userContext.userId());
+            document.setFileName(fileName);
+            document.setFileCategory(category);
+            document.setSourceType("WEB");
 
-        DocumentVersion version = new DocumentVersion();
-        version.setDocumentId(document.getId());
-        version.setVersionNo(1);
-        version.setFileSize(file.getSize());
-        version.setSha256(sha256);
-        version.setStorageKey(storageKey);
-        version.setParseStatus("UPLOADED");
-        version.setIsCurrent(1);
-        documentVersionMapper.insert(version);
+            DocumentVersion version = new DocumentVersion();
+            version.setDeptId(userContext.deptId());
+            version.setVersionNo(1);
+            version.setFileSize(file.getSize());
+            version.setSha256(sha256);
+            version.setStorageKey(storageKey);
+            version.setParseStatus("UPLOADED");
+            version.setIsCurrent(1);
+            DocumentVersion savedVersion = documentPersistenceService.save(document, version);
 
-        return toResponse(document, version, false);
+            return toResponse(document, savedVersion, false);
+        } catch (RuntimeException exception) {
+            boolean duplicateConflict = isDuplicateConflict(exception);
+
+            try {
+                minioStorageService.removeObject(storageKey);
+            } catch (RuntimeException cleanupException) {
+                log.warn("文件数据库入库失败，MinIO 对象补偿清理失败: {}", storageKey, cleanupException);
+            }
+
+            if (duplicateConflict) {
+                UploadDocumentResponse duplicateAfterConflict =
+                        findDuplicate(userContext.deptId(), sha256);
+                if (duplicateAfterConflict != null) {
+                    return duplicateAfterConflict;
+                }
+            }
+            throw new BizException(500, "文件数据库入库失败", exception);
+        }
+    }
+
+    public UploadDocumentResponse uploadEmailAttachment(String originalFileName, String contentType,
+                                                         byte[] content) {
+        UserContext userContext = UserContextHolder.getRequired();
+        tenantAccessChecker.requireAnyRole("ADMIN", "DISPATCHER");
+        tenantAccessChecker.requireSameDepartment(userContext.deptId());
+        if (content == null || content.length == 0) {
+            throw new BizException(400, "邮件附件不能为空");
+        }
+
+        String fileName = FileNameUtils.sanitize(originalFileName, DEFAULT_FILE_NAME);
+        if (fileName.length() > MAX_FILE_NAME_LENGTH) {
+            fileName = fileName.substring(fileName.length() - MAX_FILE_NAME_LENGTH);
+        }
+        String sha256;
+        try {
+            sha256 = Sha256Utils.hash(new ByteArrayInputStream(content));
+        } catch (IOException exception) {
+            throw new BizException(500, "读取邮件附件失败", exception);
+        }
+        UploadDocumentResponse duplicateResponse = findDuplicate(userContext.deptId(), sha256);
+        if (duplicateResponse != null) {
+            return duplicateResponse;
+        }
+
+        String storageKey = buildStorageKey(userContext.deptId(), "SOURCE", fileName);
+        minioStorageService.putObject(storageKey, new ByteArrayInputStream(content), content.length, contentType);
+        try {
+            Document document = new Document();
+            document.setDeptId(userContext.deptId());
+            document.setUploaderId(userContext.userId());
+            document.setFileName(fileName);
+            document.setFileCategory("SOURCE");
+            document.setSourceType("EMAIL");
+
+            DocumentVersion version = new DocumentVersion();
+            version.setDeptId(userContext.deptId());
+            version.setVersionNo(1);
+            version.setFileSize((long) content.length);
+            version.setSha256(sha256);
+            version.setStorageKey(storageKey);
+            version.setParseStatus("UPLOADED");
+            version.setIsCurrent(1);
+            DocumentVersion savedVersion = documentPersistenceService.save(document, version);
+            return toResponse(document, savedVersion, false);
+        } catch (RuntimeException exception) {
+            boolean duplicateConflict = isDuplicateConflict(exception);
+            try {
+                minioStorageService.removeObject(storageKey);
+            } catch (RuntimeException cleanupException) {
+                log.warn("邮件附件数据库入库失败，MinIO 对象补偿清理失败: {}", storageKey, cleanupException);
+            }
+            if (duplicateConflict) {
+                UploadDocumentResponse duplicate = findDuplicate(userContext.deptId(), sha256);
+                if (duplicate != null) {
+                    return duplicate;
+                }
+            }
+            throw new BizException(500, "邮件附件入库失败", exception);
+        }
+    }
+
+    private static boolean isDuplicateConflict(RuntimeException exception) {
+        if (exception instanceof DataIntegrityViolationException) {
+            return true;
+        }
+        Throwable cause = exception;
+        while (cause != null) {
+            String message = cause.getMessage();
+            if (message != null && (message.contains("duplicate key")
+                    || message.contains("uk_document_version_dept_sha256_current"))) {
+                return true;
+            }
+            cause = cause.getCause();
+        }
+        return false;
     }
 
     private UploadDocumentResponse findDuplicate(Long deptId, String sha256) {

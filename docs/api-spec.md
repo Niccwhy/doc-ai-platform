@@ -78,3 +78,18 @@
   }
 }
 ```
+
+## 六、邮件发现与附件导入
+
+邮件接口仅允许当前部门的 `ADMIN`、`DISPATCHER` 调用。查询接口只保存邮件正文文本和附件元信息，不读取附件二进制；附件只有在用户明确选择后才会从 IMAP 读取并写入 MinIO。
+
+| 方法 | 路径 | 说明 |
+| :--- | :--- | :--- |
+| `POST` | `/api/v1/emails/discover` | 手动查询当前部门启用邮箱的新邮件，并保存元信息 |
+| `GET` | `/api/v1/emails?status=UNPROCESSED` | 查询已发现邮件，可按处理状态筛选 |
+| `GET` | `/api/v1/emails/{emailId}` | 查询邮件正文及附件元信息 |
+| `POST` | `/api/v1/emails/{emailId}/attachments/import` | 按 `attachmentIds` 导入选中附件并创建文档版本 |
+| `POST` | `/api/v1/emails/{emailId}/attachments/{attachmentId}/ignore` | 忽略单个附件 |
+| `POST` | `/api/v1/emails/{emailId}/ignore` | 忽略邮件及尚未处理的附件 |
+
+邮件状态为 `UNPROCESSED`、`PROCESSED`、`IGNORED`；附件状态还包括处理中、导入失败等内部状态。成功导入的附件通过 `document_version_id` 追溯对应版本。

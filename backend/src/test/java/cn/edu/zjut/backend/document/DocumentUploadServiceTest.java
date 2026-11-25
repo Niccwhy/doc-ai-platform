@@ -5,11 +5,13 @@ import cn.edu.zjut.backend.document.entity.Document;
 import cn.edu.zjut.backend.document.entity.DocumentVersion;
 import cn.edu.zjut.backend.document.mapper.DocumentMapper;
 import cn.edu.zjut.backend.document.mapper.DocumentVersionMapper;
+import cn.edu.zjut.backend.document.service.DocumentPersistenceService;
 import cn.edu.zjut.backend.document.service.DocumentUploadService;
 import cn.edu.zjut.backend.exception.BizException;
+import cn.edu.zjut.backend.security.TenantAccessChecker;
 import cn.edu.zjut.backend.security.UserContext;
 import cn.edu.zjut.backend.security.UserContextHolder;
-import cn.edu.zjut.backend.storage.MinioStorageService;
+import cn.edu.zjut.backend.storage.service.MinioStorageService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -44,14 +46,21 @@ class DocumentUploadServiceTest {
     private DocumentVersionMapper documentVersionMapper;
 
     @Mock
+    private DocumentPersistenceService documentPersistenceService;
+
+    @Mock
     private MinioStorageService minioStorageService;
+
+    @Mock
+    private TenantAccessChecker tenantAccessChecker;
 
     private DocumentUploadService documentUploadService;
 
     @BeforeEach
     void setUp() {
         documentUploadService = new DocumentUploadService(
-                documentMapper, documentVersionMapper, minioStorageService);
+            documentMapper, documentVersionMapper, documentPersistenceService,
+            minioStorageService, tenantAccessChecker);
         UserContextHolder.set(new UserContext(9L, 3L, "alice", "DISPATCHER"));
     }
 
@@ -80,7 +89,7 @@ class DocumentUploadServiceTest {
         assertThat(keyCaptor.getValue()).startsWith("dept/3/source/").endsWith(".pdf");
 
         ArgumentCaptor<DocumentVersion> versionCaptor = ArgumentCaptor.forClass(DocumentVersion.class);
-        verify(documentVersionMapper).insert(versionCaptor.capture());
+        verify(documentPersistenceService).save(any(Document.class), versionCaptor.capture());
         DocumentVersion savedVersion = versionCaptor.getValue();
         assertThat(savedVersion.getSha256()).hasSize(64);
         assertThat(savedVersion.getIsCurrent()).isEqualTo(1);
@@ -127,8 +136,7 @@ class DocumentUploadServiceTest {
         assertThat(response.documentId()).isEqualTo(50L);
         assertThat(response.versionId()).isEqualTo(60L);
         verify(minioStorageService, never()).putObject(anyString(), any(), anyLong(), anyString());
-        verify(documentMapper, never()).insert(any(Document.class));
-        verify(documentVersionMapper, never()).insert(any(DocumentVersion.class));
+        verify(documentPersistenceService, never()).save(any(Document.class), any(DocumentVersion.class));
     }
 
     @Test
@@ -141,7 +149,7 @@ class DocumentUploadServiceTest {
 
         assertThat(exception).isNotNull();
         assertThat(exception.getCode()).isEqualTo(400);
-        verifyNoInteractions(documentMapper, documentVersionMapper, minioStorageService);
+        verifyNoInteractions(documentMapper, documentVersionMapper, documentPersistenceService, minioStorageService);
     }
 
     @Test
@@ -151,7 +159,7 @@ class DocumentUploadServiceTest {
 
         assertThat(exception).isNotNull();
         assertThat(exception.getCode()).isEqualTo(400);
-        verifyNoInteractions(documentMapper, documentVersionMapper, minioStorageService);
+        verifyNoInteractions(documentMapper, documentVersionMapper, documentPersistenceService, minioStorageService);
     }
 
     @Test
@@ -163,7 +171,7 @@ class DocumentUploadServiceTest {
 
         assertThat(exception).isNotNull();
         assertThat(exception.getCode()).isEqualTo(401);
-        verifyNoInteractions(documentMapper, documentVersionMapper, minioStorageService);
+        verifyNoInteractions(documentMapper, documentVersionMapper, documentPersistenceService, minioStorageService);
     }
 
     @Test
@@ -182,13 +190,27 @@ class DocumentUploadServiceTest {
         doAnswer(invocation -> {
             Document document = invocation.getArgument(0);
             document.setId(100L);
-            return 1;
-        }).when(documentMapper).insert(any(Document.class));
-        doAnswer(invocation -> {
-            DocumentVersion version = invocation.getArgument(0);
+            DocumentVersion version = invocation.getArgument(1);
+            version.setDocumentId(document.getId());
             version.setId(200L);
-            return 1;
-        }).when(documentVersionMapper).insert(any(DocumentVersion.class));
+            return version;
+        }).when(documentPersistenceService).save(any(Document.class), any(DocumentVersion.class));
+    }
+
+    @Test
+    void shouldCreateDocumentFromEmailAttachment() {
+        stubGeneratedIds();
+        UploadDocumentResponse response = documentUploadService.uploadEmailAttachment(
+                "合同.pdf", "application/pdf", "hello".getBytes(StandardCharsets.UTF_8));
+
+        assertThat(response.duplicate()).isFalse();
+        assertThat(response.documentId()).isEqualTo(100L);
+        ArgumentCaptor<Document> documentCaptor = ArgumentCaptor.forClass(Document.class);
+        ArgumentCaptor<DocumentVersion> versionCaptor = ArgumentCaptor.forClass(DocumentVersion.class);
+        verify(documentPersistenceService).save(documentCaptor.capture(), versionCaptor.capture());
+        assertThat(documentCaptor.getValue().getSourceType()).isEqualTo("EMAIL");
+        assertThat(documentCaptor.getValue().getFileCategory()).isEqualTo("SOURCE");
+        assertThat(versionCaptor.getValue().getStorageKey()).startsWith("dept/3/source/");
     }
 
     private static MockMultipartFile pdfFile(String fileName) {

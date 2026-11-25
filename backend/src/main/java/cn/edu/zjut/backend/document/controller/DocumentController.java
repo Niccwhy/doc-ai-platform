@@ -4,6 +4,7 @@ import cn.edu.zjut.backend.common.Result;
 import cn.edu.zjut.backend.document.dto.UploadDocumentResponse;
 import cn.edu.zjut.backend.document.service.DocumentUploadService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -18,6 +19,7 @@ public class DocumentController {
     private final DocumentUploadService documentUploadService;
 
     @PostMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'DISPATCHER')")
     public Result<UploadDocumentResponse> upload(@RequestParam("file") MultipartFile file,
                                                  @RequestParam(defaultValue = "SOURCE") String fileCategory) {
         return Result.success(documentUploadService.upload(file, fileCategory));

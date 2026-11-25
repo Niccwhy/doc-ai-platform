@@ -13,6 +13,7 @@ public class DocumentVersion {
 
     @TableId(type = IdType.AUTO)
     private Long id;
+    private Long deptId;
     private Long documentId;
     private Integer versionNo;
     private Long fileSize;

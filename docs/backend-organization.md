@@ -109,7 +109,7 @@ module/
 
 ### `email/`
 
-负责 IMAP 定时拉取、邮件附件解析和 `email_pending` 暂存。附件确认后再进入正式文件资产库。
+负责手动 IMAP 邮件发现、邮件/附件元信息管理和用户选择性附件导入。附件导入后直接创建 `document`、`document_version`，不再经过 `email_pending`。
 
 ### `audit/`
 
